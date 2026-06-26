@@ -6,10 +6,9 @@
 	"CategoryIcon": "imgs/plugin/tasmota_logo",
 	"CodePath": "bin/plugin.js",
 	"Description": "Control your Tasmota devices with your Stream Deck.",
-	"URL": "https://github.com/aeinstein/streamdeck-tasmota-plugin",
+	"URL": "https://github.com/aeinstein/streamdeck-tasmota-v2",
 	"Icon": "imgs/actions/plugin_icon",
 	"SDKVersion": 2,
-
 	"Actions": [
 		{
 			"Name": "Toggle Power",
@@ -17,56 +16,72 @@
 			"Icon": "imgs/actions/power",
 			"Tooltip": "Toggle power on/off",
 			"PropertyInspectorPath": "ui/outlet.html",
-			"Controllers": ["Keypad"],
+			"Controllers": [
+				"Keypad"
+			],
 			"States": [
-				{ "Image": "imgs/actions/power" },
-				{ "Image": "imgs/actions/power_on" }
+				{
+					"Image": "imgs/actions/power"
+				},
+				{
+					"Image": "imgs/actions/power_on"
+				}
 			]
 		},
-
 		{
 			"Name": "Fixed RGB",
 			"UUID": "de.itnox.streamdeck.tasmota.fixed",
 			"Icon": "imgs/actions/rgb",
 			"Tooltip": "Send a fixed RGB color (long press: toggle power)",
 			"PropertyInspectorPath": "ui/fixed.html",
-			"Controllers": ["Keypad"],
+			"Controllers": [
+				"Keypad"
+			],
 			"States": [
-				{ "Image": "imgs/actions/rgb" }
+				{
+					"Image": "imgs/actions/rgb"
+				}
 			]
 		},
-
 		{
 			"Name": "Fixed CWW",
 			"UUID": "de.itnox.streamdeck.tasmota.wwfixed",
 			"Icon": "imgs/actions/cww",
 			"Tooltip": "Send a fixed Cold/Warm White preset (long press: toggle power)",
 			"PropertyInspectorPath": "ui/wwfixed.html",
-			"Controllers": ["Keypad"],
+			"Controllers": [
+				"Keypad"
+			],
 			"States": [
-				{ "Image": "imgs/actions/cww" }
+				{
+					"Image": "imgs/actions/cww"
+				}
 			]
 		},
-
 		{
 			"Name": "Custom Command",
 			"UUID": "de.itnox.streamdeck.tasmota.custom",
 			"Icon": "imgs/actions/command",
 			"Tooltip": "Send a custom Tasmota command (long press: second command)",
 			"PropertyInspectorPath": "ui/custom.html",
-			"Controllers": ["Keypad"],
+			"Controllers": [
+				"Keypad"
+			],
 			"States": [
-				{ "Image": "imgs/actions/command" }
+				{
+					"Image": "imgs/actions/command"
+				}
 			]
 		},
-
 		{
 			"Name": "Color (Hue)",
 			"UUID": "de.itnox.streamdeck.tasmota.color",
 			"Icon": "imgs/actions/rgb",
 			"Tooltip": "Control hue via dial (press: toggle 0/180)",
 			"PropertyInspectorPath": "ui/ledstripe.html",
-			"Controllers": ["Encoder"],
+			"Controllers": [
+				"Encoder"
+			],
 			"Encoder": {
 				"layout": "layouts/rgb.json",
 				"TriggerDescription": {
@@ -75,17 +90,20 @@
 				}
 			},
 			"States": [
-				{ "Image": "imgs/actions/rgb" }
+				{
+					"Image": "imgs/actions/rgb"
+				}
 			]
 		},
-
 		{
 			"Name": "Brightness",
 			"UUID": "de.itnox.streamdeck.tasmota.brightness",
 			"Icon": "imgs/actions/brightness",
 			"Tooltip": "Control brightness via dial (press: toggle 0/100)",
 			"PropertyInspectorPath": "ui/ledstripe.html",
-			"Controllers": ["Encoder"],
+			"Controllers": [
+				"Encoder"
+			],
 			"Encoder": {
 				"layout": "layouts/brightness.json",
 				"TriggerDescription": {
@@ -94,17 +112,20 @@
 				}
 			},
 			"States": [
-				{ "Image": "imgs/actions/brightness" }
+				{
+					"Image": "imgs/actions/brightness"
+				}
 			]
 		},
-
 		{
 			"Name": "Saturation",
 			"UUID": "de.itnox.streamdeck.tasmota.saturation",
 			"Icon": "imgs/actions/saturation",
 			"Tooltip": "Control saturation via dial (press: toggle 0/100)",
 			"PropertyInspectorPath": "ui/ledstripe.html",
-			"Controllers": ["Encoder"],
+			"Controllers": [
+				"Encoder"
+			],
 			"Encoder": {
 				"layout": "layouts/saturation.json",
 				"TriggerDescription": {
@@ -113,10 +134,11 @@
 				}
 			},
 			"States": [
-				{ "Image": "imgs/actions/saturation" }
+				{
+					"Image": "imgs/actions/saturation"
+				}
 			]
 		},
-
 		{
 			"Name": "HSB Control",
 			"UUID": "de.itnox.streamdeck.tasmota.rgbdevice",
@@ -124,7 +146,9 @@
 			"Tooltip": "Control Hue, Saturation, Brightness (press: switch parameter, long touch: toggle power)",
 			"PropertyInspectorPath": "ui/ledstripe.html",
 			"SupportedInMultiActions": false,
-			"Controllers": ["Encoder"],
+			"Controllers": [
+				"Encoder"
+			],
 			"Encoder": {
 				"layout": "layouts/rgb.json",
 				"TriggerDescription": {
@@ -134,10 +158,11 @@
 				}
 			},
 			"States": [
-				{ "Image": "imgs/actions/rgb" }
+				{
+					"Image": "imgs/actions/rgb"
+				}
 			]
 		},
-
 		{
 			"Name": "CWW Control",
 			"UUID": "de.itnox.streamdeck.tasmota.wwdevice",
@@ -145,7 +170,9 @@
 			"Tooltip": "Control Color Temperature + White (press: switch parameter, long touch: toggle power)",
 			"PropertyInspectorPath": "ui/ledstripe.html",
 			"SupportedInMultiActions": false,
-			"Controllers": ["Encoder"],
+			"Controllers": [
+				"Encoder"
+			],
 			"Encoder": {
 				"layout": "layouts/colortemp.json",
 				"TriggerDescription": {
@@ -155,15 +182,15 @@
 				}
 			},
 			"States": [
-				{ "Image": "imgs/actions/cww" }
+				{
+					"Image": "imgs/actions/cww"
+				}
 			]
 		}
 	],
-
 	"Software": {
 		"MinimumVersion": "6.5"
 	},
-
 	"OS": [
 		{
 			"Platform": "mac",
