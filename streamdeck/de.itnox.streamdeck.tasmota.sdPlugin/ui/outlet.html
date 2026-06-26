@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+<head lang="en">
+    <meta charset="utf-8" />
+    <script src="sdpi-components.js"></script>
+</head>
+<body>
+    <sdpi-item label="URL">
+        <sdpi-textfield setting="url" placeholder="http://192.168.1.100"></sdpi-textfield>
+    </sdpi-item>
+
+    <sdpi-item label="Password">
+        <sdpi-password setting="password"></sdpi-password>
+    </sdpi-item>
+
+    <sdpi-item label="Title Mode">
+        <sdpi-select setting="titleMode">
+            <option value="0">Power State</option>
+            <option value="1">Current Power</option>
+            <option value="2">Today Energy</option>
+            <option value="3">Total Energy</option>
+        </sdpi-select>
+    </sdpi-item>
+
+    <sdpi-item label="Auto Refresh">
+        <sdpi-select setting="autoRefresh">
+            <option value="0">Disabled</option>
+            <option value="5">5 Seconds</option>
+            <option value="30">30 Seconds</option>
+            <option value="60">1 Minute</option>
+            <option value="120">2 Minutes</option>
+            <option value="300">5 Minutes</option>
+        </sdpi-select>
+    </sdpi-item>
+</body>
+</html>
