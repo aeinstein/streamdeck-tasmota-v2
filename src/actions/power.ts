@@ -1,35 +1,74 @@
-import { action, KeyDownEvent, SingletonAction, WillAppearEvent, WillDisappearEvent } from "@elgato/streamdeck";
+import streamDeck, { action, DidReceiveSettingsEvent, KeyDownEvent, SingletonAction, WillAppearEvent, WillDisappearEvent } from "@elgato/streamdeck";
 import type { KeyAction } from "@elgato/streamdeck";
+import { Device } from "../device";
 import { deviceCache } from "../cache";
+
+const log = streamDeck.logger.createScope("Toggle");
 
 @action({ UUID: "de.itnox.streamdeck.tasmota.power" })
 export class Toggle extends SingletonAction<TasmotaSettings> {
+    private actionMap: Map<string, KeyAction<TasmotaSettings>> = new Map();
+
     override onWillAppear(ev: WillAppearEvent<TasmotaSettings>): void | Promise<void> {
         const { settings } = ev.payload;
-        if (!settings.url) return;
+        log.debug(`onWillAppear: isKey=${ev.action.isKey()} settings=${JSON.stringify(ev.payload.settings)}`);
+        if (!ev.action.isKey()) return;
+        if (!settings.url) {
+            ev.action.getSettings();
+            return;
+        }
 
-        const device = deviceCache.getOrAddDevice(ev.action.id, settings.url, settings);
+        const keyAction = ev.action;
+        this.actionMap.set(keyAction.id, keyAction);
+        const device = deviceCache.getOrAddDevice(keyAction.id, settings.url, settings);
+        log.debug(`onWillAppear: device=${!!device}`);
         if (!device) return;
 
+        log.debug(`onWillAppear: ctx=${keyAction.id.slice(-6)} url=${settings.url} autoRefresh=${settings.autoRefresh}`);
+
         device.send("/cm?cmnd=Power", (_dev, success, result) => {
-            if (success && ev.action.isKey()) updateButton(ev.action, result, settings);
+            log.debug(`initial Power response: success=${success} result=${JSON.stringify(result)}`);
+            if (success) updateButton(keyAction, result, settings);
         }, true);
 
-        if (settings.autoRefresh && settings.autoRefresh > 0) {
-            device.setAutoRefresh(settings.autoRefresh, () => {
-                device.send("/cm?cmnd=Status%2010", (_dev, success, result) => {
-                    if (success && ev.action.isKey()) updateButton(ev.action, result, settings);
-                }, true);
-            });
+        this.setupDeviceRefresh(device);
+    }
+
+    override onDidReceiveSettings(ev: DidReceiveSettingsEvent<TasmotaSettings>): void | Promise<void> {
+        const { settings } = ev.payload;
+        log.debug(`onDidReceiveSettings: isKey=${ev.action.isKey()} url=${settings.url} autoRefresh=${settings.autoRefresh}`);
+        if (!settings.url || !ev.action.isKey()) return;
+
+        const keyAction = ev.action;
+        const wasKnown = this.actionMap.has(keyAction.id);
+        this.actionMap.set(keyAction.id, keyAction);
+
+        const device = deviceCache.getOrAddDevice(keyAction.id, settings.url, settings);
+        if (!device) return;
+
+        device.settings[keyAction.id] = settings;
+
+        if (!wasKnown) {
+            // onWillAppear hatte noch keine URL — initiale Abfrage nachholen
+            device.send("/cm?cmnd=Power", (_dev, success, result) => {
+                log.debug(`onDidReceiveSettings initial Power: success=${success} result=${JSON.stringify(result)}`);
+                if (success) updateButton(keyAction, result, settings);
+            }, true);
         }
+
+        this.setupDeviceRefresh(device);
     }
 
     override onWillDisappear(ev: WillDisappearEvent<TasmotaSettings>): void | Promise<void> {
         const { settings } = ev.payload;
-        if (!settings.url) return;
+        this.actionMap.delete(ev.action.id);
 
+        if (!settings.url) return;
         const device = deviceCache.getOrAddDevice(ev.action.id, settings.url, settings);
-        device?.setAutoRefresh(-1, () => {});
+
+        if (device && device.contexts.length <= 1) {
+            device.setAutoRefresh(0, () => {});
+        }
         deviceCache.removeContext(ev.action.id, settings.url);
     }
 
@@ -43,6 +82,43 @@ export class Toggle extends SingletonAction<TasmotaSettings> {
         device.send("/cm?cmnd=Power%20TOGGLE", (_dev, success, result) => {
             if (success) updateButton(ev.action, result, settings);
         }, true);
+    }
+
+    private setupDeviceRefresh(device: Device) {
+        log.debug(`setupDeviceRefresh: called, contexts=${device.contexts.length}`);
+        let minRefresh = Infinity;
+        let needsEnergy = false;
+
+        for (const ctx of device.contexts) {
+            const s = device.settings[ctx] as TasmotaSettings;
+            if (s?.autoRefresh && s.autoRefresh > 0) {
+                minRefresh = Math.min(minRefresh, s.autoRefresh);
+            }
+            if (s?.titleMode && s.titleMode > 0) needsEnergy = true;
+        }
+
+        if (minRefresh === Infinity) {
+            log.debug(`setupDeviceRefresh: no autoRefresh configured, stopping timer`);
+            device.setAutoRefresh(0, () => {});
+            return;
+        }
+
+        const query = needsEnergy ? "/cm?cmnd=Status%2010" : "/cm?cmnd=Power";
+        log.debug(`setupDeviceRefresh: interval=${minRefresh}s query=${query} contexts=${device.contexts.length}`);
+
+        device.setAutoRefresh(minRefresh, () => {
+            log.debug(`refresh tick: sending ${query}`);
+            device.send(query, (_dev, success, result) => {
+                log.debug(`refresh response: success=${success} result=${JSON.stringify(result)}`);
+                if (!success) return;
+                for (const ctx of device.contexts) {
+                    const keyAction = this.actionMap.get(ctx);
+                    const s = device.settings[ctx] as TasmotaSettings;
+                    log.debug(`updating ctx=${ctx.slice(-6)} keyAction=${!!keyAction} titleMode=${s?.titleMode}`);
+                    if (keyAction) updateButton(keyAction, result, s);
+                }
+            }, true);
+        });
     }
 }
 
@@ -63,6 +139,7 @@ function updateButton(action: KeyAction<TasmotaSettings>, result: any, settings:
         title = total !== undefined ? `${total}kWh` : "";
     }
 
+    log.debug(`updateButton: mode=${mode} title="${title}" POWER=${result.POWER}`);
     action.setTitle(title);
 
     if (result.POWER !== undefined) {
