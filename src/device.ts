@@ -1,3 +1,7 @@
+import streamDeck from "@elgato/streamdeck";
+
+const log = streamDeck.logger.createScope("Device");
+
 export type Callback = (device: Device, success: boolean, result: any) => void;
 
 interface QueueItem {
@@ -34,8 +38,11 @@ export class Device {
             return;
         }
 
-        const alreadyQueued = this.queue.some(item => item.querystring === querystring);
-        if (!alreadyQueued) {
+        const existing = this.queue.find(item => item.querystring === querystring);
+        if (existing) {
+            const prev = existing.callback;
+            existing.callback = (dev, success, result) => { prev(dev, success, result); callback(dev, success, result); };
+        } else {
             this.queue.push({ querystring, callback });
             this.tick();
         }
@@ -57,6 +64,8 @@ export class Device {
         try {
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 2000);
+            log.debug("fetch: " + this.url + item.querystring);
+
             const response = await fetch(this.url + item.querystring + auth, { signal: controller.signal });
             clearTimeout(timeout);
 
@@ -91,5 +100,33 @@ export class Device {
         if (secs > 0) {
             this.RefreshPid = setInterval(callback, secs * 1000);
         }
+    }
+
+    private hsbPollSubs = new Map<string, { minSecs: number; cb: (success: boolean, result: any) => void }>();
+    private hsbPollTimer: ReturnType<typeof setInterval> | undefined;
+
+    subscribeHSBPoll(key: string, minSecs: number, cb: (success: boolean, result: any) => void): void {
+        this.hsbPollSubs.set(key, { minSecs, cb });
+        this.restartHSBPollTimer();
+    }
+
+    unsubscribeHSBPoll(key: string): void {
+        this.hsbPollSubs.delete(key);
+        this.restartHSBPollTimer();
+    }
+
+    private restartHSBPollTimer(): void {
+        if (this.hsbPollTimer !== undefined) { clearInterval(this.hsbPollTimer); this.hsbPollTimer = undefined; }
+        let min = Infinity;
+        for (const { minSecs } of this.hsbPollSubs.values()) min = Math.min(min, minSecs);
+        if (!isFinite(min)) return;
+        this.hsbPollTimer = setInterval(() => {
+            this.doRequest({
+                querystring: "/cm?cmnd=HSBColor",
+                callback: (_dev, success, result) => {
+                    for (const { cb } of this.hsbPollSubs.values()) cb(success, result);
+                }
+            });
+        }, min * 1000);
     }
 }

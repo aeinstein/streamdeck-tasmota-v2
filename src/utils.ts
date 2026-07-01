@@ -61,7 +61,7 @@ export function togglePower(device: Device, callback: Callback) {
 }
 
 export function getHSBColor(device: Device, callback: Callback) {
-    device.send("/cm?cmnd=HSBColor", callback, true);
+    device.send("/cm?cmnd=HSBColor", callback);
 }
 
 export function sendCommand(device: Device, command: string, callback: Callback) {

@@ -112,6 +112,7 @@ export class Toggle extends SingletonAction<TasmotaSettings> {
 
         device.setAutoRefresh(minRefresh, () => {
             log.debug(`refresh tick: sending ${query}`);
+
             device.send(query, (_dev, success, result) => {
                 log.debug(`refresh response: success=${success} result=${JSON.stringify(result)}`);
                 if (!success) {
@@ -130,7 +131,7 @@ export class Toggle extends SingletonAction<TasmotaSettings> {
 }
 
 function updateButton(action: KeyAction<TasmotaSettings>, result: any, settings: TasmotaSettings) {
-    const mode = settings.titleMode ?? 0;
+    const mode = Number(settings.titleMode ?? 0);
     let title = "";
 
     if (mode === 0) {

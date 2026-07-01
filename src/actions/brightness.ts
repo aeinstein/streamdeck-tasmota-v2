@@ -6,7 +6,7 @@ import { getHSBColor, parseHSBResult, sendBrightness, togglePower } from "../uti
 
 @action({ UUID: "de.itnox.streamdeck.tasmota.brightness" })
 export class BrightnessControl extends SingletonAction<EncoderSettings> {
-    private refreshTimers: Map<string, ReturnType<typeof setInterval>> = new Map();
+    private contextSettings: Map<string, EncoderSettings> = new Map();
     private pressStart: Map<string, number> = new Map();
     private actionInstances: Map<string, DialAction<EncoderSettings>> = new Map();
 
@@ -28,10 +28,15 @@ export class BrightnessControl extends SingletonAction<EncoderSettings> {
     }
 
     override onWillDisappear(ev: WillDisappearEvent<EncoderSettings>): void {
-        this.clearRefresh(ev.action.id);
-        this.actionInstances.delete(ev.action.id);
+        const ctxId = ev.action.id;
         const { settings } = ev.payload;
-        if (settings.url) deviceCache.removeContext(ev.action.id, settings.url);
+        this.actionInstances.delete(ctxId);
+        this.contextSettings.delete(ctxId);
+        if (settings.url) {
+            const device = deviceCache.getOrAddDevice(ctxId, settings.url, settings);
+            if (device) this.resubscribe(settings.url, device);
+            deviceCache.removeContext(ctxId, settings.url);
+        }
     }
 
     override onDialRotate(ev: DialRotateEvent<EncoderSettings>): void {
@@ -72,33 +77,41 @@ export class BrightnessControl extends SingletonAction<EncoderSettings> {
         const device = deviceCache.getOrAddDevice(act.id, settings.url!, settings);
         if (!device) return;
         this.actionInstances.set(act.id, act);
+        this.contextSettings.set(act.id, settings);
 
-        const updateFeedback = () => {
-            getHSBColor(device, (_dev, success, result) => {
-                if (!success) { this.showAlertAll(_dev); return; }
-                parseHSBResult(device, result);
-                act.setFeedback({ value: String(device.HSBColor[2]), indicator: device.HSBColor[2] });
-            });
-        };
+        getHSBColor(device, (_dev, success, result) => {
+            if (!success) { this.showAlertAll(_dev); return; }
+            parseHSBResult(device, result);
+            act.setFeedback({ value: String(device.HSBColor[2]), indicator: device.HSBColor[2] });
+        });
 
-        updateFeedback();
-        this.clearRefresh(act.id);
+        this.resubscribe(settings.url!, device);
+    }
 
-        const secs = Number(settings.autoRefresh);
-        if (secs > 0) {
-            this.refreshTimers.set(act.id, setInterval(updateFeedback, secs * 1000));
+    private resubscribe(url: string, device: Device): void {
+        let minSecs = Infinity;
+        for (const s of this.contextSettings.values()) {
+            if (s.url === url && s.autoRefresh && Number(s.autoRefresh) > 0)
+                minSecs = Math.min(minSecs, Number(s.autoRefresh));
         }
+        if (!isFinite(minSecs)) {
+            device.unsubscribeHSBPoll("brightness");
+            return;
+        }
+        device.subscribeHSBPoll("brightness", minSecs, (success, result) => {
+            if (!success) { this.showAlertAll(device); return; }
+            parseHSBResult(device, result);
+            for (const ctx of device.contexts) {
+                const a = this.actionInstances.get(ctx);
+                if (a) a.setFeedback({ value: String(device.HSBColor[2]), indicator: device.HSBColor[2] });
+            }
+        });
     }
 
     private showAlertAll(dev: Device): void {
         for (const ctx of dev.contexts) {
             this.actionInstances.get(ctx)?.showAlert();
         }
-    }
-
-    private clearRefresh(contextId: string) {
-        const t = this.refreshTimers.get(contextId);
-        if (t !== undefined) { clearInterval(t); this.refreshTimers.delete(contextId); }
     }
 }
 
