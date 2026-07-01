@@ -1,6 +1,7 @@
 import { action, DialDownEvent, DialRotateEvent, DialUpEvent, DidReceiveSettingsEvent, SingletonAction, TouchTapEvent, WillAppearEvent, WillDisappearEvent } from "@elgato/streamdeck";
 import type { DialAction } from "@elgato/streamdeck";
 import { deviceCache } from "../cache";
+import { Device } from "../device";
 import { getHSBColor, hsl2rgb, parseHSBResult, rgb2hex, sendBrightness, sendHue, sendSaturation, togglePower } from "../utils";
 
 const LAYOUTS: [string, string][] = [
@@ -14,6 +15,7 @@ export class HsbControl extends SingletonAction<EncoderSettings> {
     private readonly viewStates = new Map<string, number>();
     private refreshTimers: Map<string, ReturnType<typeof setInterval>> = new Map();
     private pressStart: Map<string, number> = new Map();
+    private actionInstances: Map<string, DialAction<EncoderSettings>> = new Map();
 
     override async onWillAppear(ev: WillAppearEvent<EncoderSettings>): Promise<void> {
         if (!ev.action.isDial()) return;
@@ -38,6 +40,7 @@ export class HsbControl extends SingletonAction<EncoderSettings> {
 
     override onWillDisappear(ev: WillDisappearEvent<EncoderSettings>): void {
         this.clearRefresh(ev.action.id);
+        this.actionInstances.delete(ev.action.id);
         this.viewStates.delete(ev.action.id);
         const { settings } = ev.payload;
         if (settings.url) deviceCache.removeContext(ev.action.id, settings.url);
@@ -85,17 +88,17 @@ export class HsbControl extends SingletonAction<EncoderSettings> {
             case 0:
                 device.HSBColor[0] = (device.HSBColor[0] + ticks + 361) % 361;
                 ev.action.setFeedback(buildFeedback(0, device.HSBColor));
-                sendHue(device, device.HSBColor[0], () => {});
+                sendHue(device, device.HSBColor[0], (dev, success) => { if (!success) this.showAlertAll(dev); });
                 break;
             case 1:
                 device.HSBColor[1] = Math.max(0, Math.min(100, device.HSBColor[1] + ticks));
                 ev.action.setFeedback(buildFeedback(1, device.HSBColor));
-                sendSaturation(device, device.HSBColor[1], () => {});
+                sendSaturation(device, device.HSBColor[1], (dev, success) => { if (!success) this.showAlertAll(dev); });
                 break;
             case 2:
                 device.HSBColor[2] = Math.max(0, Math.min(100, device.HSBColor[2] + ticks));
                 ev.action.setFeedback(buildFeedback(2, device.HSBColor));
-                sendBrightness(device, device.HSBColor[2], () => {});
+                sendBrightness(device, device.HSBColor[2], (dev, success) => { if (!success) this.showAlertAll(dev); });
                 break;
         }
     }
@@ -116,10 +119,11 @@ export class HsbControl extends SingletonAction<EncoderSettings> {
     private initAction(act: DialAction<EncoderSettings>, settings: EncoderSettings) {
         const device = deviceCache.getOrAddDevice(act.id, settings.url!, settings);
         if (!device) return;
+        this.actionInstances.set(act.id, act);
 
         const updateFeedback = () => {
             getHSBColor(device, (_dev, success, result) => {
-                if (!success) return;
+                if (!success) { this.showAlertAll(_dev); return; }
                 parseHSBResult(device, result);
                 const vs = this.viewStates.get(act.id) ?? 0;
                 act.setFeedback(buildFeedback(vs, device.HSBColor));
@@ -132,6 +136,12 @@ export class HsbControl extends SingletonAction<EncoderSettings> {
         const secs = Number(settings.autoRefresh);
         if (secs > 0) {
             this.refreshTimers.set(act.id, setInterval(updateFeedback, secs * 1000));
+        }
+    }
+
+    private showAlertAll(dev: Device): void {
+        for (const ctx of dev.contexts) {
+            this.actionInstances.get(ctx)?.showAlert();
         }
     }
 

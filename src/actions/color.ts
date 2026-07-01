@@ -1,12 +1,14 @@
 import { action, DialDownEvent, DialRotateEvent, DialUpEvent, DidReceiveSettingsEvent, SingletonAction, WillAppearEvent, WillDisappearEvent } from "@elgato/streamdeck";
 import type { DialAction } from "@elgato/streamdeck";
 import { deviceCache } from "../cache";
+import { Device } from "../device";
 import { getHSBColor, parseHSBResult, sendHue, togglePower } from "../utils";
 
 @action({ UUID: "de.itnox.streamdeck.tasmota.color" })
 export class ColorControl extends SingletonAction<EncoderSettings> {
     private refreshTimers: Map<string, ReturnType<typeof setInterval>> = new Map();
     private pressStart: Map<string, number> = new Map();
+    private actionInstances: Map<string, DialAction<EncoderSettings>> = new Map();
 
     override async onWillAppear(ev: WillAppearEvent<EncoderSettings>): Promise<void> {
         if (!ev.action.isDial()) return;
@@ -27,6 +29,7 @@ export class ColorControl extends SingletonAction<EncoderSettings> {
 
     override onWillDisappear(ev: WillDisappearEvent<EncoderSettings>): void {
         this.clearRefresh(ev.action.id);
+        this.actionInstances.delete(ev.action.id);
         const { settings } = ev.payload;
         if (settings.url) deviceCache.removeContext(ev.action.id, settings.url);
     }
@@ -40,7 +43,7 @@ export class ColorControl extends SingletonAction<EncoderSettings> {
 
         device.HSBColor[0] = (device.HSBColor[0] + ev.payload.ticks + 361) % 361;
         ev.action.setFeedback({ value: String(device.HSBColor[0]), indicator: device.HSBColor[0] });
-        sendHue(device, device.HSBColor[0], () => {});
+        sendHue(device, device.HSBColor[0], (dev, success) => { if (!success) this.showAlertAll(dev); });
     }
 
     override onDialDown(ev: DialDownEvent<EncoderSettings>): void {
@@ -61,17 +64,18 @@ export class ColorControl extends SingletonAction<EncoderSettings> {
         } else {
             device.HSBColor[0] = device.HSBColor[0] > 0 ? 0 : 180;
             ev.action.setFeedback({ value: String(device.HSBColor[0]), indicator: device.HSBColor[0] });
-            sendHue(device, device.HSBColor[0], () => {});
+            sendHue(device, device.HSBColor[0], (dev, success) => { if (!success) this.showAlertAll(dev); });
         }
     }
 
     private initAction(act: DialAction<EncoderSettings>, settings: EncoderSettings) {
         const device = deviceCache.getOrAddDevice(act.id, settings.url!, settings);
         if (!device) return;
+        this.actionInstances.set(act.id, act);
 
         const updateFeedback = () => {
             getHSBColor(device, (_dev, success, result) => {
-                if (!success) return;
+                if (!success) { this.showAlertAll(_dev); return; }
                 parseHSBResult(device, result);
                 act.setFeedback({ value: String(device.HSBColor[0]), indicator: device.HSBColor[0] });
             });
@@ -83,6 +87,12 @@ export class ColorControl extends SingletonAction<EncoderSettings> {
         const secs = Number(settings.autoRefresh);
         if (secs > 0) {
             this.refreshTimers.set(act.id, setInterval(updateFeedback, secs * 1000));
+        }
+    }
+
+    private showAlertAll(dev: Device): void {
+        for (const ctx of dev.contexts) {
+            this.actionInstances.get(ctx)?.showAlert();
         }
     }
 

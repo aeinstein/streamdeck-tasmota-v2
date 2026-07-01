@@ -80,7 +80,11 @@ export class Toggle extends SingletonAction<TasmotaSettings> {
         if (!device) return;
 
         device.send("/cm?cmnd=Power%20TOGGLE", (_dev, success, result) => {
-            if (success) updateButton(ev.action, result, settings);
+            if (!success) {
+                for (const ctx of _dev.contexts) this.actionMap.get(ctx)?.showAlert();
+                return;
+            }
+            updateButton(ev.action, result, settings);
         }, true);
     }
 
@@ -110,7 +114,10 @@ export class Toggle extends SingletonAction<TasmotaSettings> {
             log.debug(`refresh tick: sending ${query}`);
             device.send(query, (_dev, success, result) => {
                 log.debug(`refresh response: success=${success} result=${JSON.stringify(result)}`);
-                if (!success) return;
+                if (!success) {
+                    for (const ctx of _dev.contexts) this.actionMap.get(ctx)?.showAlert();
+                    return;
+                }
                 for (const ctx of device.contexts) {
                     const keyAction = this.actionMap.get(ctx);
                     const s = device.settings[ctx] as TasmotaSettings;

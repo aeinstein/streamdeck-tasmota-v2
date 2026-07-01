@@ -1,6 +1,7 @@
 import { action, DialDownEvent, DialRotateEvent, DialUpEvent, DidReceiveSettingsEvent, SingletonAction, TouchTapEvent, WillAppearEvent, WillDisappearEvent } from "@elgato/streamdeck";
 import type { DialAction, FeedbackPayload } from "@elgato/streamdeck";
 import { deviceCache } from "../cache";
+import { Device } from "../device";
 import { getHSBColor, parseHSBResult, sendCT, sendWhite, togglePower } from "../utils";
 
 const LAYOUTS: [string, string][] = [
@@ -13,6 +14,7 @@ export class CwwControl extends SingletonAction<EncoderSettings> {
     private readonly viewStates = new Map<string, number>();
     private refreshTimers: Map<string, ReturnType<typeof setInterval>> = new Map();
     private pressStart: Map<string, number> = new Map();
+    private actionInstances: Map<string, DialAction<EncoderSettings>> = new Map();
 
     override async onWillAppear(ev: WillAppearEvent<EncoderSettings>): Promise<void> {
         if (!ev.action.isDial()) return;
@@ -37,6 +39,7 @@ export class CwwControl extends SingletonAction<EncoderSettings> {
 
     override onWillDisappear(ev: WillDisappearEvent<EncoderSettings>): void {
         this.clearRefresh(ev.action.id);
+        this.actionInstances.delete(ev.action.id);
         this.viewStates.delete(ev.action.id);
         const { settings } = ev.payload;
         if (settings.url) deviceCache.removeContext(ev.action.id, settings.url);
@@ -83,11 +86,11 @@ export class CwwControl extends SingletonAction<EncoderSettings> {
         if (vs === 0) {
             device.CT = Math.max(153, Math.min(500, device.CT + ticks));
             ev.action.setFeedback(buildFeedback(0, device));
-            sendCT(device, device.CT, () => {});
+            sendCT(device, device.CT, (dev, success) => { if (!success) this.showAlertAll(dev); });
         } else {
             device.White = Math.max(0, Math.min(100, device.White + ticks));
             ev.action.setFeedback(buildFeedback(1, device));
-            sendWhite(device, device.White, () => {});
+            sendWhite(device, device.White, (dev, success) => { if (!success) this.showAlertAll(dev); });
         }
     }
 
@@ -107,10 +110,11 @@ export class CwwControl extends SingletonAction<EncoderSettings> {
     private initAction(act: DialAction<EncoderSettings>, settings: EncoderSettings) {
         const device = deviceCache.getOrAddDevice(act.id, settings.url!, settings);
         if (!device) return;
+        this.actionInstances.set(act.id, act);
 
         const updateFeedback = () => {
             getHSBColor(device, (_dev, success, result) => {
-                if (!success) return;
+                if (!success) { this.showAlertAll(_dev); return; }
                 parseHSBResult(device, result);
                 const vs = this.viewStates.get(act.id) ?? 0;
                 act.setFeedback(buildFeedback(vs, device));
@@ -123,6 +127,12 @@ export class CwwControl extends SingletonAction<EncoderSettings> {
         const secs = Number(settings.autoRefresh);
         if (secs > 0) {
             this.refreshTimers.set(act.id, setInterval(updateFeedback, secs * 1000));
+        }
+    }
+
+    private showAlertAll(dev: Device): void {
+        for (const ctx of dev.contexts) {
+            this.actionInstances.get(ctx)?.showAlert();
         }
     }
 

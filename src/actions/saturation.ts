@@ -1,12 +1,14 @@
 import { action, DialDownEvent, DialRotateEvent, DialUpEvent, DidReceiveSettingsEvent, SingletonAction, WillAppearEvent, WillDisappearEvent } from "@elgato/streamdeck";
 import type { DialAction } from "@elgato/streamdeck";
 import { deviceCache } from "../cache";
+import { Device } from "../device";
 import { getHSBColor, hsl2rgb, parseHSBResult, rgb2hex, sendSaturation, togglePower } from "../utils";
 
 @action({ UUID: "de.itnox.streamdeck.tasmota.saturation" })
 export class SaturationControl extends SingletonAction<EncoderSettings> {
     private refreshTimers: Map<string, ReturnType<typeof setInterval>> = new Map();
     private pressStart: Map<string, number> = new Map();
+    private actionInstances: Map<string, DialAction<EncoderSettings>> = new Map();
 
     override async onWillAppear(ev: WillAppearEvent<EncoderSettings>): Promise<void> {
         if (!ev.action.isDial()) return;
@@ -27,6 +29,7 @@ export class SaturationControl extends SingletonAction<EncoderSettings> {
 
     override onWillDisappear(ev: WillDisappearEvent<EncoderSettings>): void {
         this.clearRefresh(ev.action.id);
+        this.actionInstances.delete(ev.action.id);
         const { settings } = ev.payload;
         if (settings.url) deviceCache.removeContext(ev.action.id, settings.url);
     }
@@ -40,7 +43,7 @@ export class SaturationControl extends SingletonAction<EncoderSettings> {
 
         device.HSBColor[1] = Math.max(0, Math.min(100, device.HSBColor[1] + ev.payload.ticks));
         ev.action.setFeedback(buildFeedback(device.HSBColor[0], device.HSBColor[1]));
-        sendSaturation(device, device.HSBColor[1], () => {});
+        sendSaturation(device, device.HSBColor[1], (dev, success) => { if (!success) this.showAlertAll(dev); });
     }
 
     override onDialDown(ev: DialDownEvent<EncoderSettings>): void {
@@ -61,17 +64,18 @@ export class SaturationControl extends SingletonAction<EncoderSettings> {
         } else {
             device.HSBColor[1] = device.HSBColor[1] > 0 ? 0 : 100;
             ev.action.setFeedback(buildFeedback(device.HSBColor[0], device.HSBColor[1]));
-            sendSaturation(device, device.HSBColor[1], () => {});
+            sendSaturation(device, device.HSBColor[1], (dev, success) => { if (!success) this.showAlertAll(dev); });
         }
     }
 
     private initAction(act: DialAction<EncoderSettings>, settings: EncoderSettings) {
         const device = deviceCache.getOrAddDevice(act.id, settings.url!, settings);
         if (!device) return;
+        this.actionInstances.set(act.id, act);
 
         const updateFeedback = () => {
             getHSBColor(device, (_dev, success, result) => {
-                if (!success) return;
+                if (!success) { this.showAlertAll(_dev); return; }
                 parseHSBResult(device, result);
                 act.setFeedback(buildFeedback(device.HSBColor[0], device.HSBColor[1]));
             });
@@ -83,6 +87,12 @@ export class SaturationControl extends SingletonAction<EncoderSettings> {
         const secs = Number(settings.autoRefresh);
         if (secs > 0) {
             this.refreshTimers.set(act.id, setInterval(updateFeedback, secs * 1000));
+        }
+    }
+
+    private showAlertAll(dev: Device): void {
+        for (const ctx of dev.contexts) {
+            this.actionInstances.get(ctx)?.showAlert();
         }
     }
 
