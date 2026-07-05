@@ -134,17 +134,22 @@ function updateButton(action: KeyAction<TasmotaSettings>, result: any, settings:
     const mode = Number(settings.titleMode ?? 0);
     let title = "";
 
+    const formatValue = (value: unknown) => {
+        const num = Number(value);
+        return Number.isFinite(num) ? num.toFixed(1) : "";
+    };
+
     if (mode === 0) {
         title = result.POWER ?? "";
     } else if (mode === 1) {
         const power = result.StatusSNS?.ENERGY?.Power;
-        title = power !== undefined ? `${power}W` : "";
+        title = power !== undefined ? `${formatValue(power)} W` : "";
     } else if (mode === 2) {
         const today = result.StatusSNS?.ENERGY?.Today;
-        title = today !== undefined ? `${today}kWh` : "";
+        title = today !== undefined ? `${formatValue(today)} kWh` : "";
     } else if (mode === 3) {
         const total = result.StatusSNS?.ENERGY?.Total;
-        title = total !== undefined ? `${total}kWh` : "";
+        title = total !== undefined ? `${formatValue(total)} kWh` : "";
     }
 
     log.debug(`updateButton: mode=${mode} title="${title}" POWER=${result.POWER}`);
