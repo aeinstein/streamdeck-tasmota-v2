@@ -9,8 +9,14 @@ interface QueueItem {
     callback: Callback;
 }
 
+// Commands with an argument supersede earlier ones of the same command; queries are kept apart.
+function queueKey(querystring: string): string {
+    const [command, arg] = querystring.split("%20", 2);
+    return arg === undefined ? querystring : `${command}=`;
+}
+
 export class Device {
-    queue: QueueItem[] = [];
+    queue = new Map<string, QueueItem>();
     TimerPid: ReturnType<typeof setTimeout> | null = null;
     RefreshPid: ReturnType<typeof setInterval> | null = null;
     url: string;
@@ -38,12 +44,13 @@ export class Device {
             return;
         }
 
-        const existing = this.queue.find(item => item.querystring === querystring);
-        if (existing) {
+        const key = queueKey(querystring);
+        const existing = this.queue.get(key);
+        if (existing && existing.querystring === querystring) {
             const prev = existing.callback;
             existing.callback = (dev, success, result) => { prev(dev, success, result); callback(dev, success, result); };
         } else {
-            this.queue.push({ querystring, callback });
+            this.queue.set(key, { querystring, callback });
             this.tick();
         }
     }
@@ -51,11 +58,11 @@ export class Device {
     tick() {
         if (this.TimerPid !== null) clearTimeout(this.TimerPid);
 
-        this.TimerPid = setTimeout(() => {
+        this.TimerPid = setTimeout(async () => {
             this.TimerPid = null;
-            const item = this.queue.pop();
-            this.queue = [];
-            if (item) this.doRequest(item);
+            const items = [...this.queue.values()];
+            this.queue.clear();
+            for (const item of items) await this.doRequest(item);
         }, 200);
     }
 
