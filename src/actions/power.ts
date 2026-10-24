@@ -66,12 +66,8 @@ export class Toggle extends SingletonAction<TasmotaSettings> {
         this.actionMap.delete(ev.action.id);
 
         if (!settings.url) return;
-        const device = deviceCache.getOrAddDevice(ev.action.id, settings.url, settings);
-
-        if (device && device.contexts.length <= 1) {
-            device.setAutoRefresh(0, () => {});
-        }
-        deviceCache.removeContext(ev.action.id, settings.url);
+        const device = deviceCache.removeContext(ev.action.id, settings.url);
+        if (device) this.setupDeviceRefresh(device);
     }
 
     override async onKeyDown(ev: KeyDownEvent<TasmotaSettings>): Promise<void> {
@@ -95,7 +91,7 @@ export class Toggle extends SingletonAction<TasmotaSettings> {
         let minRefresh = Infinity;
         let needsEnergy = false;
 
-        for (const ctx of device.contexts) {
+        for (const ctx of this.powerContexts(device)) {
             const s = device.settings[ctx] as TasmotaSettings;
             if (s?.autoRefresh && s.autoRefresh > 0) {
                 minRefresh = Math.min(minRefresh, s.autoRefresh);
@@ -129,6 +125,11 @@ export class Toggle extends SingletonAction<TasmotaSettings> {
                 }
             }, true);
         });
+    }
+
+    /** Contexts of this action on the device; other actions share the device but are not Toggle buttons. */
+    private powerContexts(device: Device): string[] {
+        return device.contexts.filter(ctx => this.actionMap.has(ctx));
     }
 }
 

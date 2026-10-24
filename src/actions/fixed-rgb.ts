@@ -1,4 +1,4 @@
-import { action, KeyDownEvent, KeyUpEvent, SingletonAction } from "@elgato/streamdeck";
+import { action, KeyDownEvent, KeyUpEvent, SingletonAction, WillDisappearEvent } from "@elgato/streamdeck";
 import { deviceCache } from "../cache";
 import { sendColor, togglePower } from "../utils";
 
@@ -8,6 +8,12 @@ export class FixedRgb extends SingletonAction<FixedRgbSettings> {
 
     override onKeyDown(ev: KeyDownEvent<FixedRgbSettings>): void {
         this.pressStart.set(ev.action.id, Date.now());
+    }
+
+    override onWillDisappear(ev: WillDisappearEvent<FixedRgbSettings>): void {
+        this.pressStart.delete(ev.action.id);
+        const { url } = ev.payload.settings;
+        if (url) deviceCache.removeContext(ev.action.id, url);
     }
 
     override async onKeyUp(ev: KeyUpEvent<FixedRgbSettings>): Promise<void> {

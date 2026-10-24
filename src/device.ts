@@ -129,4 +129,11 @@ export class Device {
             });
         }, min * 1000);
     }
+
+    dispose(): void {
+        if (this.TimerPid !== null) { clearTimeout(this.TimerPid); this.TimerPid = null; }
+        this.setAutoRefresh(0, () => {});
+        this.hsbPollSubs.clear();
+        this.restartHSBPollTimer();
+    }
 }

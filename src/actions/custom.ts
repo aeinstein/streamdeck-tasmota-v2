@@ -1,4 +1,4 @@
-import { action, KeyDownEvent, KeyUpEvent, SingletonAction } from "@elgato/streamdeck";
+import { action, KeyDownEvent, KeyUpEvent, SingletonAction, WillDisappearEvent } from "@elgato/streamdeck";
 import { deviceCache } from "../cache";
 import { sendCommand } from "../utils";
 
@@ -8,6 +8,12 @@ export class CustomCommand extends SingletonAction<CustomSettings> {
 
     override onKeyDown(ev: KeyDownEvent<CustomSettings>): void {
         this.pressStart.set(ev.action.id, Date.now());
+    }
+
+    override onWillDisappear(ev: WillDisappearEvent<CustomSettings>): void {
+        this.pressStart.delete(ev.action.id);
+        const { url } = ev.payload.settings;
+        if (url) deviceCache.removeContext(ev.action.id, url);
     }
 
     override async onKeyUp(ev: KeyUpEvent<CustomSettings>): Promise<void> {

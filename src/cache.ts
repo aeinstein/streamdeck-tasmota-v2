@@ -48,8 +48,11 @@ export class Cache {
         const device = this.devices[deviceIndex];
         removeItemOnce(device.contexts, contextId);
         if (device.contexts.length === 0) {
+            device.dispose();
             this.devices.splice(deviceIndex, 1);
+            return undefined;
         }
+        return device;
     }
 }
 
