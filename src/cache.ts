@@ -18,6 +18,7 @@ export class Cache {
                 existing.contexts.push(contextId);
                 existing.settings[contextId] = settings;
             }
+            if (settings?.password !== undefined) existing.password = settings.password;
             return existing;
         }
 
