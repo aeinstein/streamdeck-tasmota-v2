@@ -28,6 +28,12 @@ jobs:
       - name: Build
         run: npm run build
 
+      # Debug is for local development only; release builds must not expose the Node inspector.
+      - name: Disable debugger in manifest
+        run: |
+          jq 'del(.Nodejs.Debug)' de.itnox.streamdeck.tasmota.sdPlugin/manifest.json > manifest.tmp
+          mv manifest.tmp de.itnox.streamdeck.tasmota.sdPlugin/manifest.json
+
       - name: Pack
         run: npx streamdeck pack de.itnox.streamdeck.tasmota.sdPlugin --output release --force --no-update-check
 
