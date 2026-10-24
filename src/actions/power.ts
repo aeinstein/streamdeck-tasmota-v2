@@ -11,7 +11,7 @@ export class Toggle extends SingletonAction<TasmotaSettings> {
 
     override onWillAppear(ev: WillAppearEvent<TasmotaSettings>): void | Promise<void> {
         const { settings } = ev.payload;
-        log.debug(`onWillAppear: isKey=${ev.action.isKey()} settings=${JSON.stringify(ev.payload.settings)}`);
+        log.debug(`onWillAppear: isKey=${ev.action.isKey()} url=${settings.url} titleMode=${settings.titleMode} autoRefresh=${settings.autoRefresh}`);
         if (!ev.action.isKey()) return;
         if (!settings.url) {
             ev.action.getSettings();
