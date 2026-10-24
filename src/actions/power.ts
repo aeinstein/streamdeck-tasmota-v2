@@ -26,10 +26,7 @@ export class Toggle extends SingletonAction<TasmotaSettings> {
 
         log.debug(`onWillAppear: ctx=${keyAction.id.slice(-6)} url=${settings.url} autoRefresh=${settings.autoRefresh}`);
 
-        device.send("/cm?cmnd=Power", (_dev, success, result) => {
-            log.debug(`initial Power response: success=${success} result=${JSON.stringify(result)}`);
-            if (success) updateButton(keyAction, result, settings);
-        }, true);
+        this.query(device, [keyAction.id]);
 
         this.setupDeviceRefresh(device);
     }
@@ -47,16 +44,12 @@ export class Toggle extends SingletonAction<TasmotaSettings> {
         const device = deviceCache.getOrAddDevice(keyAction.id, settings.url, settings);
         if (!device) return;
 
+        const prevTitleMode = device.settings[keyAction.id]?.titleMode;
         device.settings[keyAction.id] = settings;
         if (prevDevice && prevDevice !== device) this.setupDeviceRefresh(prevDevice);
 
-        if (!wasKnown) {
-            // onWillAppear hatte noch keine URL — initiale Abfrage nachholen
-            device.send("/cm?cmnd=Power", (_dev, success, result) => {
-                log.debug(`onDidReceiveSettings initial Power: success=${success} result=${JSON.stringify(result)}`);
-                if (success) updateButton(keyAction, result, settings);
-            }, true);
-        }
+        // New button or title mode: fetch what the button now shows instead of waiting for the next refresh.
+        if (!wasKnown || prevTitleMode !== settings.titleMode) this.query(device, [keyAction.id]);
 
         this.setupDeviceRefresh(device);
     }
@@ -86,17 +79,43 @@ export class Toggle extends SingletonAction<TasmotaSettings> {
         }, true);
     }
 
+    private query(device: Device, contexts: string[]) {
+        const apply = (result: any) => {
+            for (const ctx of contexts) {
+                const keyAction = this.actionMap.get(ctx);
+                const s = device.settings[ctx] as TasmotaSettings;
+                log.debug(`updating ctx=${ctx.slice(-6)} keyAction=${!!keyAction} titleMode=${s?.titleMode}`);
+                if (keyAction) updateButton(keyAction, result, s);
+            }
+        };
+
+        device.send("/cm?cmnd=Power", (_dev, success, result) => {
+            log.debug(`Power response: success=${success} result=${JSON.stringify(result)}`);
+            if (!success) {
+                for (const ctx of contexts) this.actionMap.get(ctx)?.showAlert();
+                return;
+            }
+            apply(result);
+        }, true);
+
+        // Status 10 has the energy readings but no POWER, so it is queried in addition to Power.
+        if (contexts.some(ctx => Number(device.settings[ctx]?.titleMode ?? 0) > 0)) {
+            device.send("/cm?cmnd=Status%2010", (_dev, success, result) => {
+                log.debug(`Status 10 response: success=${success} result=${JSON.stringify(result)}`);
+                if (success) apply(result);
+            }, true);
+        }
+    }
+
     private setupDeviceRefresh(device: Device) {
         log.debug(`setupDeviceRefresh: called, contexts=${device.contexts.length}`);
         let minRefresh = Infinity;
-        let needsEnergy = false;
 
         for (const ctx of this.powerContexts(device)) {
             const s = device.settings[ctx] as TasmotaSettings;
             if (s?.autoRefresh && s.autoRefresh > 0) {
                 minRefresh = Math.min(minRefresh, s.autoRefresh);
             }
-            if (s?.titleMode && s.titleMode > 0) needsEnergy = true;
         }
 
         if (minRefresh === Infinity) {
@@ -105,25 +124,11 @@ export class Toggle extends SingletonAction<TasmotaSettings> {
             return;
         }
 
-        const query = needsEnergy ? "/cm?cmnd=Status%2010" : "/cm?cmnd=Power";
-        log.debug(`setupDeviceRefresh: interval=${minRefresh}s query=${query} contexts=${device.contexts.length}`);
+        log.debug(`setupDeviceRefresh: interval=${minRefresh}s contexts=${device.contexts.length}`);
 
         device.setAutoRefresh(minRefresh, () => {
-            log.debug(`refresh tick: sending ${query}`);
-
-            device.send(query, (_dev, success, result) => {
-                log.debug(`refresh response: success=${success} result=${JSON.stringify(result)}`);
-                if (!success) {
-                    for (const ctx of _dev.contexts) this.actionMap.get(ctx)?.showAlert();
-                    return;
-                }
-                for (const ctx of device.contexts) {
-                    const keyAction = this.actionMap.get(ctx);
-                    const s = device.settings[ctx] as TasmotaSettings;
-                    log.debug(`updating ctx=${ctx.slice(-6)} keyAction=${!!keyAction} titleMode=${s?.titleMode}`);
-                    if (keyAction) updateButton(keyAction, result, s);
-                }
-            }, true);
+            log.debug(`refresh tick`);
+            this.query(device, device.contexts);
         });
     }
 
@@ -134,29 +139,28 @@ export class Toggle extends SingletonAction<TasmotaSettings> {
 }
 
 function updateButton(action: KeyAction<TasmotaSettings>, result: any, settings: TasmotaSettings) {
-    const mode = Number(settings.titleMode ?? 0);
-    let title = "";
+    const mode = Number(settings?.titleMode ?? 0);
+    const energy = result.StatusSNS?.ENERGY;
 
     const formatValue = (value: unknown) => {
         const num = Number(value);
         return Number.isFinite(num) ? num.toFixed(1) : "";
     };
 
+    // A response carries either POWER or the energy readings; leave the title alone if it has neither for this mode.
+    let title: string | undefined;
     if (mode === 0) {
-        title = result.POWER ?? "";
+        title = result.POWER;
     } else if (mode === 1) {
-        const power = result.StatusSNS?.ENERGY?.Power;
-        title = power !== undefined ? `${formatValue(power)} W` : "";
+        if (energy?.Power !== undefined) title = `${formatValue(energy.Power)} W`;
     } else if (mode === 2) {
-        const today = result.StatusSNS?.ENERGY?.Today;
-        title = today !== undefined ? `${formatValue(today)} kWh` : "";
+        if (energy?.Today !== undefined) title = `${formatValue(energy.Today)} kWh`;
     } else if (mode === 3) {
-        const total = result.StatusSNS?.ENERGY?.Total;
-        title = total !== undefined ? `${formatValue(total)} kWh` : "";
+        if (energy?.Total !== undefined) title = `${formatValue(energy.Total)} kWh`;
     }
 
     log.debug(`updateButton: mode=${mode} title="${title}" POWER=${result.POWER}`);
-    action.setTitle(title);
+    if (title !== undefined) action.setTitle(title);
 
     if (result.POWER !== undefined) {
         action.setState(result.POWER === "ON" ? 1 : 0);
