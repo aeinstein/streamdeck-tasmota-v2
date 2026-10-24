@@ -122,10 +122,12 @@ export class HsbControl extends SingletonAction<EncoderSettings> {
     }
 
     private initAction(act: DialAction<EncoderSettings>, settings: EncoderSettings) {
+        const prevDevice = deviceCache.deviceOf(act.id);
         const device = deviceCache.getOrAddDevice(act.id, settings.url!, settings);
         if (!device) return;
         this.actionInstances.set(act.id, act);
         this.contextSettings.set(act.id, settings);
+        if (prevDevice && prevDevice !== device) this.resubscribe(prevDevice.url, prevDevice);
 
         getHSBColor(device, (_dev, success, result) => {
             if (!success) { this.showAlertAll(_dev); return; }

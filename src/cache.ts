@@ -8,9 +8,15 @@ function removeItemOnce<T>(arr: T[], value: T): T[] {
 
 export class Cache {
     devices: Device[] = [];
+    private contextUrls = new Map<string, string>();
 
     getOrAddDevice(contextId: string, url: string, settings: any): Device | undefined {
         if (!url) return undefined;
+
+        // A context belongs to exactly one device, so detach it when its URL changed.
+        const prevUrl = this.contextUrls.get(contextId);
+        if (prevUrl !== undefined && prevUrl !== url) this.removeContext(contextId, prevUrl);
+        this.contextUrls.set(contextId, url);
 
         const existing = this.devices.find(d => d.url === url);
         if (existing) {
@@ -27,7 +33,13 @@ export class Cache {
         return device;
     }
 
+    deviceOf(contextId: string): Device | undefined {
+        const url = this.contextUrls.get(contextId);
+        return url === undefined ? undefined : this.devices.find(d => d.url === url);
+    }
+
     removeContext(contextId: string, url: string) {
+        this.contextUrls.delete(contextId);
         if (!url) return;
 
         const deviceIndex = this.devices.findIndex(d => d.url === url);

@@ -40,13 +40,15 @@ export class Toggle extends SingletonAction<TasmotaSettings> {
         if (!settings.url || !ev.action.isKey()) return;
 
         const keyAction = ev.action;
-        const wasKnown = this.actionMap.has(keyAction.id);
+        const prevDevice = deviceCache.deviceOf(keyAction.id);
+        const wasKnown = this.actionMap.has(keyAction.id) && prevDevice?.url === settings.url;
         this.actionMap.set(keyAction.id, keyAction);
 
         const device = deviceCache.getOrAddDevice(keyAction.id, settings.url, settings);
         if (!device) return;
 
         device.settings[keyAction.id] = settings;
+        if (prevDevice && prevDevice !== device) this.setupDeviceRefresh(prevDevice);
 
         if (!wasKnown) {
             // onWillAppear hatte noch keine URL — initiale Abfrage nachholen
