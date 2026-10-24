@@ -67,7 +67,7 @@ export class Device {
     }
 
     async doRequest(item: QueueItem): Promise<void> {
-        const auth = this.password ? `&user=admin&password=${this.password}` : "";
+        const auth = this.password ? `&user=admin&password=${encodeURIComponent(this.password)}` : "";
         try {
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 2000);

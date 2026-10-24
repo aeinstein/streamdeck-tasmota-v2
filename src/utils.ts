@@ -65,5 +65,5 @@ export function getHSBColor(device: Device, callback: Callback) {
 }
 
 export function sendCommand(device: Device, command: string, callback: Callback) {
-    device.send(`/cm?cmnd=${command}`, callback, true);
+    device.send(`/cm?cmnd=${encodeURIComponent(command)}`, callback, true);
 }
